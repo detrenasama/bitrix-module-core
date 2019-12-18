@@ -152,7 +152,7 @@ class Options {
 	}
     public function get(\$name, \$default = null, \$siteId = false)
     {
-        return \$this->safeValue(Option::get(\$this->moduleId, \$name, \$default, \$siteId));
+        return \$this->dbValue(Option::get(\$this->moduleId, \$name, \$default, \$siteId));
     }
     public function set(\$name, \$value = '', \$siteId = '')
     {
@@ -204,7 +204,7 @@ class Options {
 
 	protected function dbValue(\$value)
 	{
-		if (is_array(\$res = unserialize(\$value)))
+		if (is_string(\$value) && is_array(\$res = unserialize(\$value)))
 			return \$res;
 
 		return \$value;

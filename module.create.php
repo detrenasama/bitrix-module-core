@@ -419,21 +419,7 @@ abstract class Installer extends \CModule
         include(\$dir . "/install/version.php");
         \$this->MODULE_VERSION = \$arModuleVersion["VERSION"];
         \$this->MODULE_VERSION_DATE = \$arModuleVersion["VERSION_DATE"];
-        
-        \$this->MODULE_NAME = \$this->getName();
-        \$this->MODULE_DESCRIPTION = \$this->getDescription();
-        \$this->PARTNER_NAME = \$this->getPartnerName();
-        \$this->PARTNER_URI = \$this->getPartnerUrl();
     }
-
-    /** @return string */
-    abstract public function getName();
-    /** @return string */
-    abstract public function getDescription();
-    /** @return string */
-    abstract public function getPartnerName();
-    /** @return string */
-    abstract public function getPartnerUrl();
 
     public function DoInstall()
     {
@@ -482,7 +468,7 @@ abstract class Installer extends \CModule
     /**
      * @return string
      */
-    public function getModuleDir()
+    private function getModuleDir()
     {
         return dirname(dirname(__DIR__));
     }
@@ -490,7 +476,7 @@ abstract class Installer extends \CModule
     /**
      * @return string
      */
-    public function getVendor()
+    private function getVendor()
     {
         return (string) substr(\$this->MODULE_ID, 0, strpos(\$this->MODULE_ID, '.'));
     }
@@ -498,7 +484,7 @@ abstract class Installer extends \CModule
     /**
      * @return string
      */
-    public function getModuleCode()
+    private function getModuleCode()
     {
         return (string) substr(\$this->MODULE_ID, strpos(\$this->MODULE_ID, '.')+1);
     }
@@ -686,36 +672,30 @@ if (class_exists('{{ module.class }}')) {
 include_once(dirname(__DIR__) . '/src/Core/Installer.php');
 
 class {{ module.class }} extends Installer {
-    public function getName()
+    public function __construct()
     {
-        return Loc::getMessage("{{ lang.prefix }}_MODULE_NAME");
-    }
+        parent::__construct();
 
-    public function getDescription()
-    {
-        return Loc::getMessage("{{ lang.prefix }}_MODULE_DESCRIPTION");
-    }
-
-    public function getPartnerName()
-    {
-        return Loc::getMessage("{{ lang.prefix }}_COMPANY_NAME");
-    }
-
-    public function getPartnerUrl()
-    {
-        return Loc::getMessage("{{ lang.prefix }}_PARTNER_URI");
+        \$this->MODULE_NAME = Loc::getMessage("CW_LL_MODULE_NAME");
+        \$this->MODULE_DESCRIPTION = Loc::getMessage("CW_LL_MODULE_DESCRIPTION");
+        \$this->PARTNER_NAME = Loc::getMessage("CW_LL_COMPANY_NAME");
+        \$this->PARTNER_URI = Loc::getMessage("CW_LL_PARTNER_URI");
     }
 
     public function DoInstall()
     {
         parent::DoInstall();
 
-        // Your code here
+        // Your code here, e.g.:
+        // \$this->InstallDB();
+        // \$this->InstallEvents();
     }
 
     public function DoUninstall()
     {
-        // Your code here
+        // Your code here, e.g.:
+        // \$this->UnInstallEvents();
+        // \$this->UnInstallDB();
 
         parent::DoUninstall();
     }

@@ -156,7 +156,7 @@ class Options {
     }
     public function set(\$name, \$value = '', \$siteId = '')
     {
-        return Option::set(\$this->moduleId, \$name, \$value, \$siteId);
+        return Option::set(\$this->moduleId, \$name, \$this->safeValue(\$value), \$siteId);
     }
 	public function delete(array \$filter = [])
 	{
@@ -496,6 +496,7 @@ PHP;
 namespace {{ module.namespace }}\Core;
 
 use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
 use {{ module.namespace }}\Core\Config\Options;
 use Bitrix\Main\Loader;
 
@@ -568,7 +569,7 @@ abstract class BaseModule
 		return Loader::getLocal('modules/' . static::getModuleId() . '/config.php');
 	}
 
-	protected static function getCustomConfigFile()
+	protected static function getLocalConfigFile()
 	{
 		return Loader::getLocal('config/' . static::getModuleId() . '/config.php');
 	}
@@ -585,7 +586,7 @@ abstract class BaseModule
 	 * @return string
 	 */
 	public static function getModuleId() {
-	    return dirname(dirname(__DIR__));
+	    return basename(dirname(dirname(__DIR__)));
 	}
 }
 PHP;
@@ -676,10 +677,10 @@ class {{ module.class }} extends Installer {
     {
         parent::__construct();
 
-        \$this->MODULE_NAME = Loc::getMessage("CW_LL_MODULE_NAME");
-        \$this->MODULE_DESCRIPTION = Loc::getMessage("CW_LL_MODULE_DESCRIPTION");
-        \$this->PARTNER_NAME = Loc::getMessage("CW_LL_COMPANY_NAME");
-        \$this->PARTNER_URI = Loc::getMessage("CW_LL_PARTNER_URI");
+        \$this->MODULE_NAME = Loc::getMessage("{{ lang.prefix }}_MODULE_NAME");
+        \$this->MODULE_DESCRIPTION = Loc::getMessage("{{ lang.prefix }}_MODULE_DESCRIPTION");
+        \$this->PARTNER_NAME = Loc::getMessage("{{ lang.prefix }}_COMPANY_NAME");
+        \$this->PARTNER_URI = Loc::getMessage("{{ lang.prefix }}_PARTNER_URI");
     }
 
     public function DoInstall()
@@ -1101,26 +1102,33 @@ PHP;
 
 	$confirm = 'y';
 	do {
-		do {
-			IO::Ask('Module ID (ex.: vendor.module.name)', $inputs['module']['id']);
-		} while (!preg_match("/^[\w\d\.]+$/", $inputs['module']['id']) !== false);
+        do {
+            IO::Ask('Module namespace (ex.: Vendor\\ModuleName)', $inputs['module']['namespace']);
+        } while (!preg_match("/^[A-Z][\w\d]+\\\\[A-Z][\w\d]+$/", $inputs['module']['namespace']) !== false);
 
-		IO::Ask("Lang prefix", $inputs['lang']['prefix']);
+        $inputs['lang']['prefix'] = join('_', array_map(function ($e) {
+            $expr = '/[A-Z]/';
+            preg_match_all($expr, $e, $matches);
+            $result = implode('', $matches[0]);
+            return $result;
+        }, explode('\\', $inputs['module']['namespace'])));
+
+        IO::Ask("Lang prefix", $inputs['lang']['prefix']);
 		IO::Ask("Version", $inputs['module']['version']);
 
 		IO::Ask("Name", $inputs['module']['name']);
 		IO::Ask("Description", $inputs['module']['description']);
-		IO::Ask("Vendor", $inputs['vendor']['name']);
+
+        $inputs['vendor']['name'] = explode('\\', $inputs['module']['namespace'])[0];
+        $inputs['vendor']['site'] = 'https://' . strtolower($inputs['vendor']['name']) . '.ru';
+
+        IO::Ask("Vendor", $inputs['vendor']['name']);
 		IO::Ask("Vendor site", $inputs['vendor']['site']);
 
-
+        $inputs['module']['id'] = strtolower(str_replace('\\', '.', $inputs['module']['namespace']));
 		$inputs['module']['class'] = strtr($inputs['module']['id'], '.', '_');
-		$inputs['module']['namespace'] = join('\\', array_map(function ($e) {
-			return ucfirst($e);
-		}, explode('.', $inputs['module']['id'])));
 
 		$inputs['module']['versionDate'] = date_format(date_create(), 'Y-m-d H:i:s');
-
 
 		#
 		#   Confirm info

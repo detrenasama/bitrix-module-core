@@ -1,0 +1,21 @@
+{
+    "name": "detrena/bitrix-module-core",
+    "description": "Module core for Bitrix",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Detrena",
+            "email": "detrena@mail.ru"
+        }
+    ],
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "Detrena\\": "src/Detrena",
+            "Bitrix\\": "src/Bitrix"
+        }
+    },
+    "scripts": {
+        "test": "phpunit  --colors=always"
+    }
+}

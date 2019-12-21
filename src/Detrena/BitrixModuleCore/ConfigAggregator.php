@@ -1,40 +1,50 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Detrena\BitrixModuleCore;
 
-class ConfigAggregator {
+class ConfigAggregator
+{
     protected $config = [];
-    protected $cache;
 
     /**
      * @param string $filepath
      * @return array
      */
-    public function file($filepath)
+    public function file(string $filepath): array
     {
         if (is_file($filepath))
-            return (array) @include($filepath);
+            return (array)@include($filepath);
 
         return [];
     }
 
-    public function set($configs)
+    /**
+     * @param array[][] $configs
+     */
+    public function set(array $configs): void
     {
-        if ($this->cache && is_file($this->cache))
-            $this->config = (array) @include($this->cache);
-        else
-            $this->config = $this->merge(...$configs);
+        $configs = array_filter($configs, function ($e) {
+            return is_array($e);
+        });
+
+        $this->config = $this->merge(...$configs);
     }
 
-    public function get()
+    /**
+     * @return array
+     */
+    public function get(): array
     {
-        if (is_file($this->cache))
-            $this->config = (array) @include($this->cache);
-
         return $this->config;
     }
 
-    protected function merge(...$configs)
+    /**
+     * @param mixed ...$configs
+     * @return array
+     */
+    protected function merge(...$configs): array
     {
         $merged = array();
         foreach ($configs as $config) {
@@ -51,7 +61,7 @@ class ConfigAggregator {
                         continue;
                     }
 
-                    if (array_keys($value) === range(0, count($value) - 1)) {
+                    if ($this->isList($value)) {
                         $merged[$key] = array_merge($merged[$key], $value);
                         continue;
                     }
@@ -71,8 +81,8 @@ class ConfigAggregator {
         return $merged;
     }
 
-    public function cache($file)
+    protected function isList(array $value)
     {
-        $this->cache = $file;
+        return array_keys($value) === range(0, count($value) - 1);
     }
 }

@@ -5,69 +5,85 @@ namespace Detrena\BitrixModuleCore;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Detrena\BitrixModuleCore\Config\Options;
+use Detrena\BitrixModuleCore\Service\Container;
 
 abstract class BaseModule
 {
-	protected static $container;
+    protected static $container;
 
-	/**
-	 * @return ContainerInterface
-	 */
-	public static function getContainer()
-	{
-		if (!static::$container) {
-			$config = new ConfigAggregator();
-			$config->cache($_SERVER['DOCUMENT_ROOT'] . '/bitrix/cache/' . static::getModuleId() . '/config.php');
-			$config->set([
-			    $config->file(static::getConfigFile()),
-			    $config->file(static::getLocalConfigFile()),
-            ]);
+    /**
+     * @return ContainerInterface
+     */
+    public static function getContainer()
+    {
+        if (!static::$container) {
+            $config = new ConfigAggregator();
 
-			static::$container = new Container($config->get());
-		}
-		return static::$container;
-	}
+            $cache = static::getConfigCacheFile();
+            if (!is_file($cache)) {
+                $config->set([
+                    $config->file(static::getConfigFile()),
+                    $config->file(static::getLocalConfigFile()),
+                ]);
 
-	/**
-	 * @return Options
-	 */
-	public static function getOptions()
-	{
-		return static::getContainer()->get(Options::class);
-	}
+                if ($config->get()['cache_config']) {
+                    if (!is_dir(dirname($cache)))
+                        mkdir(dirname($cache), 0755, true);
 
-	protected static function getConfigFile()
-	{
-	    $cacheDir = $_SERVER['DOCUMENT_ROOT'] . '/bitrix/cache';
+                    file_put_contents($cache, '<?php return ' . var_export($config->get(), true) . ';');
+                }
+            } else {
+                $config->set([require($cache)]);
 
-	    if (is_file($file = $cacheDir . '/' . static::getModuleId() . '/config.php'))
-	        return $file;
+            }
 
-	    return static::getModuleDir() . "/config.php";
-	}
+            static::$container = new Container($config->get());
+        }
+        return static::$container;
+    }
 
-	protected static function getLocalConfigFile()
-	{
-        return glob($_SERVER['DOCUMENT_ROOT'] . "/{local,bitrix}/config/" . static::getModuleId() . "/config{.cache,}.php" ,GLOB_BRACE)[0];
-	}
+    /**
+     * @return Options
+     */
+    public static function getOptions()
+    {
+        return static::getContainer()->get(Options::class);
+    }
 
-	/**
-	 * @return LoggerInterface
-	 */
-	public static function getLogger()
-	{
-		return static::getContainer()->get(LoggerInterface::class);
-	}
+    protected static function getConfigFile()
+    {
+        return static::getModuleDir() . "/config.php";
+    }
 
-	/**
-	 * @return string
-	 */
-	public static function getModuleId() {
-	    return basename(static::getModuleDir());
-	}
+    public static function getLocalConfigFile()
+    {
+        $files = glob($_SERVER['DOCUMENT_ROOT'] . "/{local,bitrix}/config/" . static::getModuleId() . "/config{.cache,}.php", GLOB_BRACE);
+        return isset($files[0]) ? $files[0] : '';
+    }
+
+    public static function getConfigCacheFile()
+    {
+        return $_SERVER['DOCUMENT_ROOT'] . '/bitrix/cache/' . static::getModuleId() . '/config.php';
+    }
+
+    /**
+     * @return LoggerInterface
+     */
+    public static function getLogger()
+    {
+        return static::getContainer()->get(LoggerInterface::class);
+    }
+
+    /**
+     * @return string
+     */
+    public static function getModuleId()
+    {
+        return basename(static::getModuleDir());
+    }
 
     public static function getModuleDir()
     {
         return dirname(dirname(__DIR__));
-	}
+    }
 }

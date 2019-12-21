@@ -1,7 +1,8 @@
 <?php
 
-namespace Detrena\BitrixModuleCore;
+namespace Detrena\BitrixModuleCore\Service;
 
+use Detrena\BitrixModuleCore\Exceptions\ServiceFactoryNotCallableException;
 use Psr\Container\ContainerInterface;
 use Detrena\BitrixModuleCore\Exceptions\ServiceNotFoundException;
 
@@ -18,6 +19,7 @@ class Container implements ContainerInterface {
      * @param string $id
      * @return mixed
      * @throws ServiceNotFoundException
+     * @throws ServiceFactoryNotCallableException
      * @throws \ReflectionException
      */
     public function get($id)
@@ -51,9 +53,26 @@ class Container implements ContainerInterface {
 
         if ($this->services[$id] instanceof \Closure) {
             $this->cache[$id] = $this->services[$id]($this);
-        } else {
-            $this->cache[$id] = $this->services[$id];
+
+            return $this->cache[$id];
         }
+
+        // Factory class check
+        try {
+            $reflection = new \ReflectionClass($this->services[$id]);
+
+            /** @var callable $factory */
+            $factory = $reflection->newInstance();
+            $this->cache[$id] = call_user_func($factory, $this);
+
+            return $this->cache[$id];
+
+        } catch (\ReflectionException $e) {
+            // this is not a class
+
+        }
+
+        $this->cache[$id] = $this->services[$id];
 
         return $this->cache[$id];
     }

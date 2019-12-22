@@ -9,6 +9,7 @@ use Detrena\BitrixModuleCore\Service\Container;
 
 abstract class BaseModule
 {
+    /** @var Container */
     protected static $container;
 
     /**
@@ -37,7 +38,10 @@ abstract class BaseModule
 
             }
 
-            static::$container = new Container($config->get());
+            $configData = $config->get();
+            static::$container = new Container($configData);
+            if (is_array($configData['dependencies']))
+                static::$container->setDependencies($configData['dependencies']);
         }
         return static::$container;
     }

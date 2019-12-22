@@ -14,7 +14,6 @@ class Container implements ContainerInterface {
     public function __construct($params = [])
     {
         $this->services = $params;
-        $this->factories = $params['dependencies']['factories'];
     }
 
     /**
@@ -48,7 +47,12 @@ class Container implements ContainerInterface {
         return array_key_exists($id, $this->services) || class_exists($id);
     }
 
+    public function setDependencies(array $dependencies)
+    {
+        if (is_array($dependencies['factories']))
+            $this->factories = $dependencies['factories'];
 
+    }
     /**
      * @param string $id
      * @return mixed

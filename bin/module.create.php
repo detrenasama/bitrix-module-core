@@ -459,7 +459,6 @@ class Container implements ContainerInterface {
     public function __construct(\$params = [])
     {
         \$this->services = \$params;
-        \$this->factories = \$params['dependencies']['factories'];
     }
 
     /**
@@ -491,6 +490,12 @@ class Container implements ContainerInterface {
     public function has(\$id)
     {
         return array_key_exists(\$id, \$this->services) || class_exists(\$id);
+    }
+    
+    public function setDependencies(array \$dependencies)
+    {
+        if (is_array(\$dependencies['factories']))
+            \$this->factories = \$dependencies['factories'];
     }
 
 
@@ -594,8 +599,11 @@ abstract class BaseModule
                 \$config->set([require(\$cache)]);
 			}
 
-            static::\$container = new Container(\$config->get());
-			}
+            \$configData = \$config->get();
+            static::\$container = new Container(\$configData);
+            if (is_array(\$configData['dependencies']))
+                static::\$container->setDependencies(\$configData['dependencies']);
+		}
         return static::\$container;
 	}
 

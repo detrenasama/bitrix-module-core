@@ -142,10 +142,17 @@ class Options {
         \$this->moduleId = \$moduleId;
     }
 
+    /**
+     * @return array
+     */
 	public function defaults()
 	{
 		return Option::getDefaults(\$this->moduleId);
 	}
+
+    /**
+     * @return array
+     */
 	public function real()
 	{
 		return Option::getForModule(\$this->moduleId);
@@ -156,11 +163,11 @@ class Options {
     }
     public function set(\$name, \$value = '', \$siteId = '')
     {
-        return Option::set(\$this->moduleId, \$name, \$this->safeValue(\$value), \$siteId);
+        Option::set(\$this->moduleId, \$name, \$this->safeValue(\$value), \$siteId);
     }
 	public function delete(array \$filter = [])
 	{
-		return Option::delete(\$this->moduleId, \$filter);
+		Option::delete(\$this->moduleId, \$filter);
 	}
 
 
@@ -177,9 +184,9 @@ class Options {
 		\$options = \$this->defaults();
 		foreach (\$options as \$key => \$value) {
 			if (isset(\$arOptions[\$key]))
-				\$this->set(\$this->safeKey(\$key), \$this->safeValue(\$arOptions[\$key]));
+				\$this->set(\$key, \$arOptions[\$key]);
 			else
-				\$this->set(\$this->safeKey(\$key), \$this->safeValue(\$value));
+				\$this->set(\$key, \$value);
 		}
     }
 
@@ -211,6 +218,21 @@ class Options {
     }
 }
 PHP;
+    $arTemplate['/src/Core/Config/OptionsFactory.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config;
+
+use {{ module.namespace }}\Module;
+
+class OptionsFactory {
+    public function __invoke()
+    {
+        return new Options(Module::getModuleId());
+    }
+}
+PHP;
+
 	$arTemplate['/src/Core/Exceptions/ServiceNotFoundException.php'] = <<<PHP
 <?php
 
@@ -219,6 +241,15 @@ namespace {{ module.namespace }}\Core\Exceptions;
 use Psr\Container\NotFoundExceptionInterface;
 
 class ServiceNotFoundException extends \Exception implements NotFoundExceptionInterface {}
+PHP;
+    $arTemplate['/src/Core/Exceptions/ServiceFactoryNotCallableException.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Exceptions;
+
+use Psr\Container\NotFoundExceptionInterface;
+
+class ServiceFactoryNotCallableException extends \Exception implements NotFoundExceptionInterface {}
 PHP;
 
 	$arTemplate['/src/Core/Log/FileLogHandler.php'] = <<<PHP
@@ -376,6 +407,31 @@ class Logger implements LoggerInterface {
     }
 }
 PHP;
+    $arTemplate['/src/Core/Log/LoggerFactory.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Log;
+
+use {{ module.namespace }}\Core\Config\Options;
+use Psr\Container\ContainerInterface;
+
+class LoggerFactory {
+    public function __invoke(ContainerInterface \$c)
+    {
+        \$logger = new Logger();
+        \$logHandler = new FileLogHandler(\$c->get('log_file'));
+
+        \$logger->setLogHandler(\$logHandler);
+
+        /** @var Options \$options */
+        \$options = \$c->get(Options::class);
+        \$level = \$options->get('LOG_LEVEL', 0);
+        \$logger->setLevel(\$level);
+
+        return \$logger;
+    }
+}
+PHP;
 	$arTemplate['/src/Core/Log/LogHandlerInterface.php'] = <<<PHP
 <?php
 
@@ -386,7 +442,298 @@ interface LogHandlerInterface {
 }
 PHP;
 
-	$arTemplate['/src/Core/Installer.php'] = <<<PHP
+    $arTemplate['/src/Core/Service/Container.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Service;
+
+use Psr\Container\ContainerInterface;
+use {{ module.namespace }}\Core\Exceptions\ServiceNotFoundException;
+use {{ module.namespace }}\Core\Exceptions\ServiceFactoryNotCallableException;
+
+class Container implements ContainerInterface {
+    protected \$services = [];
+    protected \$factories = [];
+    protected \$cache = [];
+
+    public function __construct(\$params = [])
+    {
+        \$this->services = \$params;
+        \$this->factories = \$params['dependencies']['factories'];
+    }
+
+    /**
+     * @param string \$id
+     * @return mixed
+     * @throws ServiceNotFoundException
+     * @throws ServiceFactoryNotCallableException
+     * @throws \ReflectionException
+     */
+    public function get(\$id)
+    {
+        if (array_key_exists(\$id, \$this->cache))
+            return \$this->cache[\$id];
+
+        if (array_key_exists(\$id, \$this->factories)) {
+            \$this->cache[\$id] = \$this->doFactory(\$id);
+            return \$this->cache[\$id];
+        }
+
+        if (!array_key_exists(\$id, \$this->services)) {
+            \$this->cache[\$id] = \$this->doReflection(\$id);
+            return \$this->cache[\$id];
+        }
+
+        \$this->cache[\$id] = \$this->services[\$id];
+        return \$this->cache[\$id];
+    }
+
+    public function has(\$id)
+    {
+        return array_key_exists(\$id, \$this->services) || class_exists(\$id);
+    }
+
+
+    /**
+     * @param string \$id
+     * @return mixed
+     * @throws ServiceFactoryNotCallableException
+     */
+    protected function doFactory(\$id)
+    {
+        if (is_array(\$this->factories[\$id]) && is_callable(\$this->factories[\$id]))
+            return \$this->factories[\$id](\$this);
+
+        if (is_callable(\$this->factories[\$id]))
+            return \$this->factories[\$id](\$this);
+
+        try {
+            \$reflection = new \ReflectionClass(\$this->factories[\$id]);
+
+            /** @var callable \$factory */
+            \$factory = \$reflection->newInstance();
+            return call_user_func(\$factory, \$this);
+
+        } catch (\ReflectionException \$e) {
+            // ID is not a class
+            throw new ServiceFactoryNotCallableException("Factory '".var_export(\$this->factories[\$id],true)."' is not found or not callable!");
+        }
+    }
+
+    /**
+     * @param \$id
+     * @return object
+     * @throws ServiceFactoryNotCallableException
+     * @throws ServiceNotFoundException
+     * @throws \ReflectionException
+     */
+    protected function doReflection(\$id)
+    {
+        if (!class_exists(\$id))
+            throw new ServiceNotFoundException('Unknown service "' . \$id . '"');
+
+        \$reflection = new \ReflectionClass(\$id);
+        \$arguments = [];
+        if ((\$constructor = \$reflection->getConstructor()) !== null) {
+            foreach (\$constructor->getParameters() as \$parameter) {
+                if (\$paramClass = \$parameter->getClass()) {
+                    \$arguments[] = \$this->get(\$paramClass->getName());
+                } elseif (\$parameter->isArray()) {
+                    \$arguments[] = [];
+                    } else {
+                    if (!\$parameter->isDefaultValueAvailable())
+                        throw new ServiceNotFoundException('Unable to resolve "' . \$parameter->getName() . '" in service "' . \$id . '"');
+
+                    \$arguments[] = \$parameter->getDefaultValue();
+                }
+            }
+    }
+
+        return \$reflection->newInstanceArgs(\$arguments);
+    }
+}
+PHP;
+
+
+	$arTemplate['/src/Core/BaseModule.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core;
+
+use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
+use {{ module.namespace }}\Core\Config\Options;
+use {{ module.namespace }}\Core\Service\Container;
+
+abstract class BaseModule
+{
+	protected static \$container;
+
+	/**
+	 * @return ContainerInterface
+	 */
+	public static function getContainer()
+	{
+		if (!static::\$container) {
+            \$config = new ConfigAggregator();
+
+            \$cache = static::getConfigCacheFile();
+            if (!is_file(\$cache)) {
+                \$config->set([
+                    \$config->file(static::getConfigFile()),
+                    \$config->file(static::getLocalConfigFile()),
+                ]);
+
+                if (\$config->get()['cache_config']) {
+                    if (!is_dir(dirname(\$cache)))
+                        mkdir(dirname(\$cache), 0755, true);
+
+                    file_put_contents(\$cache, '<?php return ' . var_export(\$config->get(), true) . ';');
+				}
+            } else {
+                \$config->set([require(\$cache)]);
+			}
+
+            static::\$container = new Container(\$config->get());
+			}
+        return static::\$container;
+	}
+
+	/**
+	 * @return Options
+	 */
+	public static function getOptions()
+	{
+		return static::getContainer()->get(Options::class);
+	}
+
+	protected static function getConfigFile()
+	{
+        return static::getModuleDir() . "/config.php";
+	}
+
+    public static function getLocalConfigFile()
+	{
+        \$files = glob(\$_SERVER['DOCUMENT_ROOT'] . "/{local,bitrix}/config/" . static::getModuleId() . "/config{.cache,}.php", GLOB_BRACE);
+        return isset(\$files[0]) ? \$files[0] : '';
+    }
+
+    public static function getConfigCacheFile()
+    {
+        return \$_SERVER['DOCUMENT_ROOT'] . '/bitrix/cache/' . static::getModuleId() . '/config.php';
+	}
+
+	/**
+	 * @return LoggerInterface
+	 */
+	public static function getLogger()
+	{
+		return static::getContainer()->get(LoggerInterface::class);
+	}
+
+	/**
+	 * @return string
+	 */
+    public static function getModuleId()
+    {
+        return basename(static::getModuleDir());
+    }
+
+    public static function getModuleDir()
+    {
+        return dirname(dirname(__DIR__));
+	}
+}
+PHP;
+    $arTemplate['/src/Core/ConfigAggregator.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core;
+
+class ConfigAggregator
+{
+    protected \$config = [];
+
+    /**
+     * @param string \$filepath
+     * @return array
+     */
+    public function file(string \$filepath)
+    {
+        if (is_file(\$filepath))
+            return (array)@include(\$filepath);
+
+        return [];
+    }
+
+    /**
+     * @param array[][] \$configs
+     */
+    public function set(array \$configs)
+    {
+        \$configs = array_filter(\$configs, function (\$e) {
+            return is_array(\$e);
+        });
+
+        \$this->config = \$this->merge(...\$configs);
+    }
+
+    /**
+     * @return array
+     */
+    public function get()
+    {
+        return \$this->config;
+    }
+
+    /**
+     * @param mixed ...\$configs
+     * @return array
+     */
+    protected function merge(...\$configs)
+    {
+        \$merged = array();
+        foreach (\$configs as \$config) {
+            foreach (\$config as \$key => \$value) {
+                if (!array_key_exists(\$key, \$merged)) {
+                    \$merged[\$key] = \$value;
+                    continue;
+                }
+
+                if (is_array(\$merged[\$key])) {
+
+                    if (!is_array(\$value)) {
+                        \$merged[\$key][] = \$value;
+                        continue;
+                    }
+
+                    if (\$this->isList(\$value)) {
+                        \$merged[\$key] = array_merge(\$merged[\$key], \$value);
+                        continue;
+                    }
+
+                    \$merged[\$key] = \$this->merge(\$merged[\$key], \$value);
+                    continue;
+                }
+
+                if (is_array(\$value)) {
+                    \$merged[\$key] = \$this->merge(array(\$merged[\$key]), \$value);
+                    continue;
+                }
+
+                \$merged[\$key] = \$value;
+            }
+        }
+        return \$merged;
+    }
+
+    protected function isList(array \$value)
+    {
+        return array_keys(\$value) === range(0, count(\$value) - 1);
+    }
+}
+PHP;
+    $arTemplate['/src/Core/Installer.php'] = <<<PHP
 <?php
 
 namespace {{ module.namespace }}\Core;
@@ -487,173 +834,6 @@ abstract class Installer extends \CModule
     private function getModuleCode()
     {
         return (string) substr(\$this->MODULE_ID, strpos(\$this->MODULE_ID, '.')+1);
-    }
-}
-PHP;
-	$arTemplate['/src/Core/BaseModule.php'] = <<<PHP
-<?php
-
-namespace {{ module.namespace }}\Core;
-
-use Psr\Container\ContainerInterface;
-use Psr\Log\LoggerInterface;
-use {{ module.namespace }}\Core\Config\Options;
-use Bitrix\Main\Loader;
-
-abstract class BaseModule
-{
-	protected static \$container;
-
-	/**
-	 * @return ContainerInterface
-	 */
-	public static function getContainer()
-	{
-		if (!static::\$container) {
-			\$baseConfig = file_exists(static::getConfigFile()) ? require(static::getConfigFile()) : [];
-			\$localConfig = file_exists(static::getLocalConfigFile()) ? require(static::getLocalConfigFile()) : [];
-			\$config = static::mergeConfigs(\$baseConfig, \$localConfig);
-
-			static::\$container = new Container(\$config);
-		}
-		return static::\$container;
-	}
-
-	protected static function mergeConfigs(...\$configs)
-	{
-		\$merged = array();
-		foreach (\$configs as \$config) {
-			foreach (\$config as \$key => \$value) {
-				if (!array_key_exists(\$key, \$merged)) {
-					\$merged[\$key] = \$value;
-					continue;
-				}
-
-				if (is_array(\$merged[\$key])) {
-
-					if (!is_array(\$value)) {
-						\$merged[\$key][] = \$value;
-						continue;
-					}
-
-					if (array_keys(\$value) === range(0, count(\$value) - 1)) {
-						\$merged[\$key] = array_merge(\$merged[\$key], \$value);
-						continue;
-					}
-
-					\$merged[\$key] = static::mergeConfigs(\$merged[\$key], \$value);
-					continue;
-				}
-
-				if (is_array(\$value)) {
-					\$merged[\$key] = static::mergeConfigs(array(\$merged[\$key]), \$value);
-					continue;
-				}
-
-				\$merged[\$key] = \$value;
-			}
-		}
-		return \$merged;
-	}
-
-	/**
-	 * @return Options
-	 */
-	public static function getOptions()
-	{
-		return static::getContainer()->get(Options::class);
-	}
-
-	protected static function getConfigFile()
-	{
-		return Loader::getLocal('modules/' . static::getModuleId() . '/config.php');
-	}
-
-	protected static function getLocalConfigFile()
-	{
-		return Loader::getLocal('config/' . static::getModuleId() . '/config.php');
-	}
-
-	/**
-	 * @return LoggerInterface
-	 */
-	public static function getLogger()
-	{
-		return static::getContainer()->get(LoggerInterface::class);
-	}
-
-	/**
-	 * @return string
-	 */
-	public static function getModuleId() {
-	    return basename(dirname(dirname(__DIR__)));
-	}
-}
-PHP;
-	$arTemplate['/src/Core/Container.php'] = <<<PHP
-<?php
-
-namespace {{ module.namespace }}\Core;
-
-use Psr\Container\ContainerInterface;
-use {{ module.namespace }}\Core\Exceptions\ServiceNotFoundException;
-
-class Container implements ContainerInterface {
-    protected \$services = [];
-    protected \$cache = [];
-
-    public function __construct(\$params = [])
-    {
-        \$this->services = \$params;
-    }
-
-    /**
-     * @param string \$id
-     * @return mixed
-     * @throws ServiceNotFoundException
-     * @throws \ReflectionException
-     */
-    public function get(\$id)
-    {
-        if (array_key_exists(\$id, \$this->cache))
-            return \$this->cache[\$id];
-
-        if (!array_key_exists(\$id, \$this->services)) {
-            if (!class_exists(\$id))
-                throw new ServiceNotFoundException('Unknown service "' . \$id . '"');
-
-            \$reflection = new \ReflectionClass(\$id);
-            \$arguments = [];
-            if ((\$constructor = \$reflection->getConstructor()) !== null) {
-                foreach (\$constructor->getParameters() as \$parameter) {
-                    if (\$paramClass = \$parameter->getClass()) {
-                        \$arguments[] = \$this->get(\$paramClass->getName());
-                    } elseif (\$parameter->isArray()) {
-                        \$arguments[] = [];
-                    } else {
-                        if (!\$parameter->isDefaultValueAvailable())
-                            throw new ServiceNotFoundException('Unable to resolve "' . \$parameter->getName() . '" in service "' . \$id . '"');
-
-                        \$arguments[] = \$parameter->getDefaultValue();
-                    }
-                }
-            }
-            \$this->cache[\$id] = \$reflection->newInstanceArgs(\$arguments);
-            return \$this->cache[\$id];
-        }
-
-        if (\$this->services[\$id] instanceof \Closure) {
-            \$this->cache[\$id] = \$this->services[\$id](\$this);
-        } else {
-            \$this->cache[\$id] = \$this->services[\$id];
-        }
-
-        return \$this->cache[\$id];
-    }
-
-    public function has(\$id)
-    {
-        return array_key_exists(\$id, \$this->services) || class_exists(\$id);
     }
 }
 PHP;
@@ -936,31 +1116,20 @@ PHP;
 	$arTemplate['/config.php'] = <<<PHP
 <?php
 
-use {{ module.namespace }}\Module;
 use {{ module.namespace }}\Core\Config\Options;
-use {{ module.namespace }}\Core\Log;
-use Psr\Container\ContainerInterface;
+use {{ module.namespace }}\Core\Config\OptionsFactory;
+use {{ module.namespace }}\Core\Log\LoggerFactory;
 use Psr\Log\LoggerInterface;
 
 return [
-	Options::class => function () {
-		return new Options(Module::getModuleId());
-	},
-	LoggerInterface::class => function (ContainerInterface \$c) {
-        \$logger = new Log\Logger();
-        \$logHandler = new Log\FileLogHandler(\$c->get('log_file'));
-
-        \$logger->setLogHandler(\$logHandler);
-
-        /** @var Options \$options */
-        \$options = \$c->get(Options::class);
-        \$level = \$options->get('LOG_LEVEL', 0);
-        \$logger->setLevel(\$level);
-
-        return \$logger;
-    },
-
+    'dependencies' => [
+        'factories' => [
+            Options::class => OptionsFactory::class,
+            LoggerInterface::class => LoggerFactory::class,
+        ]
+    ],
     'log_file' => __DIR__ . '/logs/module.log',
+    'cache_config' => false,
 ];
 PHP;
 	$arTemplate['/default_option.php'] = <<<PHP
@@ -1080,10 +1249,8 @@ echo bitrix_sessid_post();
 \$tabControl->Show();
 PHP;
 
-
-
 	#Asking user
-	IO::Say("Module maker CLI v%s", '0.5');
+	IO::Say("Module maker CLI v%s", '0.6');
 	$inputs = [
 		'module' => [
 			'id' => 'local.lib',

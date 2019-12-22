@@ -33,7 +33,7 @@ class Options {
     }
     public function set($name, $value = '', $siteId = '')
     {
-        Option::set($this->moduleId, $name, $this->safeValue($value), $siteId);
+        Option::set($this->moduleId, $this->safeKey($name), $this->safeValue($value), $siteId);
     }
 	public function delete(array $filter = [])
 	{
@@ -53,9 +53,9 @@ class Options {
 		$options = $this->defaults();
 		foreach ($options as $key => $value) {
 			if (isset($arOptions[$key]))
-				$this->set($this->safeKey($key), $this->safeValue($arOptions[$key]));
+				$this->set($key, $arOptions[$key]);
 			else
-				$this->set($this->safeKey($key), $this->safeValue($value));
+				$this->set($key, $value);
 		}
     }
 

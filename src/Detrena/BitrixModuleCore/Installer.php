@@ -1,6 +1,6 @@
 <?php
 
-namespace Ctweb\Constants\Core;
+namespace Detrena\BitrixModuleCore\Core;
 
 use Bitrix\Main\Application;
 use Bitrix\Main\Loader;

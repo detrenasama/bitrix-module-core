@@ -1,12 +1,17 @@
 <?php
 
+use Detrena\BitrixModuleCore\Config\Options;
+use Detrena\BitrixModuleCore\Config\OptionsFactory;
+use Detrena\BitrixModuleCore\Log\LoggerFactory;
+use Psr\Log\LoggerInterface;
+
 return [
     'dependencies' => [
         'factories' => [
-            \Detrena\BitrixModuleCore\Config\Options::class => \Detrena\BitrixModuleCore\Config\OptionsFactory::class,
-            \Psr\Log\LoggerInterface::class => \Detrena\BitrixModuleCore\Log\LoggerFactory::class,
+            Options::class => OptionsFactory::class,
+            LoggerInterface::class => LoggerFactory::class,
         ]
     ],
-    'log_file' => dirname(__DIR__) . '/logs/log',
+    'log_file' => __DIR__ . '/logs/log',
     'cache_config' => false,
 ];

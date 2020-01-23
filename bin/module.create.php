@@ -922,7 +922,7 @@ class {{ module.class }} extends Installer {
 		global \$APPLICATION, \$DB;
 
 		if (!Option::get(\$this->MODULE_ID, 'UNINSTALL_SAVE_SETTINGS', 1)) {
-			\$this->errors = \$DB->RunSQLBatch(__DIR__.'/batch/db/'.strtolower(\$DB->type).'/uninstall.sql');
+			// \$this->errors = \$DB->RunSQLBatch(__DIR__.'/batch/db/'.strtolower(\$DB->type).'/uninstall.sql');
 		}
 		
 		if (is_array(\$this->errors))

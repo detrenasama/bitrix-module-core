@@ -798,12 +798,20 @@ abstract class Installer extends \CModule
             CopyDirFiles(\$components, Application::getDocumentRoot() . "/bitrix/components/{\$this->getVendor()}/", true, true);
         }
 
-        // Directories will be copied in /bitrix/DIRECTORY_NAME/MODULE_ID/
+        // Directories will be copied into /bitrix/DIRECTORY_NAME/MODULE_ID/
 
         \$files = glob(\$this->GetModuleDir()."/install/files/*/");
         foreach (\$files as \$dir) {
             \$basename = basename(\$dir);
             CopyDirFiles(\$dir, Application::getDocumentRoot() . "/bitrix/{\$basename}/{\$this->MODULE_ID}/", true, true);
+        }
+
+        // Files will be copied into /bitrix/admin/
+
+        \$files = glob(\$this->GetModuleDir()."/install/admin/*.php");
+        foreach (\$files as \$file) {
+            \$basename = \$this->MODULE_ID . '_' . basename(\$file);
+            CopyDirFiles(\$file, Application::getDocumentRoot() . "/bitrix/admin/{\$basename}", true, true);
         }
     }
 
@@ -817,6 +825,12 @@ abstract class Installer extends \CModule
         foreach (\$files as \$dir) {
             \$basename = basename(\$dir);
             Directory::deleteDirectory(Application::getDocumentRoot()."/bitrix/{\$basename}/{\$this->MODULE_ID}");
+        }
+
+        \$files = glob(\$this->GetModuleDir()."/install/admin/*.php");
+        foreach (\$files as \$file) {
+            \$basename = \$this->MODULE_ID . '_' . basename(\$file);
+            unlink(Application::getDocumentRoot()."/bitrix/admin/{$basename}");
         }
     }
 
@@ -876,7 +890,7 @@ class {{ module.class }} extends Installer {
         parent::DoInstall();
 
         // Your code here, e.g.:
-        // \$this->InstallDB();
+        \$this->InstallDB();
         // \$this->InstallEvents();
     }
 
@@ -884,10 +898,41 @@ class {{ module.class }} extends Installer {
     {
         // Your code here, e.g.:
         // \$this->UnInstallEvents();
-        // \$this->UnInstallDB();
+        \$this->UnInstallDB();
 
         parent::DoUninstall();
     }
+
+    public function InstallDB()
+	{
+		global \$APPLICATION, \$DB;
+		// \$this->errors = \$DB->RunSQLBatch(__DIR__.'/batch/db/'.strtolower(\$DB->type).'/install.sql');
+
+		if (is_array(\$this->errors))
+		{
+			\$APPLICATION->ThrowException(implode(' ', \$this->errors));
+			return false;
+		}
+
+		return true;
+	}
+
+	public function uninstallDB()
+	{
+		global \$APPLICATION, \$DB;
+
+		if (!Option::get(\$this->MODULE_ID, 'UNINSTALL_SAVE_SETTINGS', 1)) {
+			\$this->errors = \$DB->RunSQLBatch(__DIR__.'/batch/db/'.strtolower(\$DB->type).'/uninstall.sql');
+		}
+		
+		if (is_array(\$this->errors))
+		{
+			\$APPLICATION->ThrowException(implode(' ', \$this->errors));
+			return false;
+		}
+
+		return true;
+	}
 
 }
 

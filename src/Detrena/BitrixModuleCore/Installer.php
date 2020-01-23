@@ -54,12 +54,20 @@ abstract class Installer extends \CModule
             CopyDirFiles($components, Application::getDocumentRoot() . "/bitrix/components/{$this->getVendor()}/", true, true);
         }
 
-        // Directories will be copied in /bitrix/DIRECTORY_NAME/MODULE_ID/
+        // Directories will be copied into /bitrix/DIRECTORY_NAME/MODULE_ID/
 
         $files = glob($this->GetModuleDir()."/install/files/*/");
         foreach ($files as $dir) {
             $basename = basename($dir);
             CopyDirFiles($dir, Application::getDocumentRoot() . "/bitrix/{$basename}/{$this->MODULE_ID}/", true, true);
+        }
+
+        // Files will be copied into /bitrix/admin/
+
+        $files = glob($this->GetModuleDir()."/install/admin/*.php");
+        foreach ($files as $file) {
+            $basename = $this->MODULE_ID . '_' . basename($file);
+            CopyDirFiles($file, Application::getDocumentRoot() . "/bitrix/admin/{$basename}", true, true);
         }
     }
 
@@ -73,6 +81,12 @@ abstract class Installer extends \CModule
         foreach ($files as $dir) {
             $basename = basename($dir);
             Directory::deleteDirectory(Application::getDocumentRoot()."/bitrix/{$basename}/{$this->MODULE_ID}");
+        }
+
+        $files = glob($this->GetModuleDir()."/install/admin/*.php");
+        foreach ($files as $file) {
+            $basename = $this->MODULE_ID . '_' . basename($file);
+            unlink(Application::getDocumentRoot()."/bitrix/admin/{$basename}");
         }
     }
 

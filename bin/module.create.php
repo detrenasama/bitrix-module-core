@@ -865,6 +865,7 @@ PHP;
 
 use {{ module.namespace }}\Core\Installer;
 use Bitrix\Main\Localization\Loc;
+use Bitrix\Main\Config\Option;
 
 Loc::loadMessages(__FILE__);
 

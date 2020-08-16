@@ -1,133 +1,145 @@
 <?php
 
 namespace IO {
-	class IO {
-		static function Ask($message, &$var) {
-			if (!is_null($var)) {
-				echo "$message ({$var}): ";
-			} else {
-				echo "$message: ";
-			}
+    class IO
+    {
+        static function Ask($message, &$var)
+        {
+            if (!is_null($var)) {
+                echo "$message ({$var}): ";
+            } else {
+                echo "$message: ";
+            }
 
-			try {
-				$line = trim(fgets(STDIN));
+            try {
+                $line = trim(fgets(STDIN));
 
-				$var = strlen($line) ? $line : $var;
-			} catch (\Exception $e) {
-				self::Say("Error: %s", $e->getMessage());
-			}
-		}
+                $var = strlen($line) ? $line : $var;
+            } catch (\Exception $e) {
+                self::Say("Error: %s", $e->getMessage());
+            }
+        }
 
-		static function Say($message, $a1 = null, $a2 = null, $a3 = null, $a4 = null, $a5 = null) {
-			printf("$message\n", $a1, $a2, $a3, $a4, $a5);
-		}
-	}
+        static function Say($message, $a1 = null, $a2 = null, $a3 = null, $a4 = null, $a5 = null)
+        {
+            printf("$message\n", $a1, $a2, $a3, $a4, $a5);
+        }
+    }
 
-	class Filesystem {
-		static function CreateFile($path, $content) {
-			if (!file_exists(dirname($path))) {
-				mkdir(dirname($path), 0777, true);
-			}
-			file_put_contents($path, $content);
-		}
-	}
+    class Filesystem
+    {
+        static function CreateFile($path, $content)
+        {
+            if (!file_exists(dirname($path))) {
+                mkdir(dirname($path), 0777, true);
+            }
+            file_put_contents($path, $content);
+        }
+    }
 
-	class Progress {
-		static $progress = null;
+    class Progress
+    {
+        static $progress = null;
 
-		static function ProgressStart($message, $value = '0%') {
-			static::$progress = $message;
-			self::ProgressUpdate($value);
-		}
-		static function ProgressEnd() {
-			if (static::$progress) {
-				static::$progress = null;
-				fwrite(STDOUT, "\n");
-			}
-		}
-		static function ProgressUpdate($value) {
-			$mes = substr(static::$progress, 0, TERMINAL_WIDTH - strlen($value) - 1);
-			$whitespace = str_repeat(".", TERMINAL_WIDTH - strlen($mes) - strlen($value) - 1);
-			fwrite(STDOUT, "\r{$mes}{$whitespace} {$value}");
-		}
-	}
+        static function ProgressStart($message, $value = '0%')
+        {
+            static::$progress = $message;
+            self::ProgressUpdate($value);
+        }
+        static function ProgressEnd()
+        {
+            if (static::$progress) {
+                static::$progress = null;
+                fwrite(STDOUT, "\n");
+            }
+        }
+        static function ProgressUpdate($value)
+        {
+            $mes = substr(static::$progress, 0, TERMINAL_WIDTH - strlen($value) - 1);
+            $whitespace = str_repeat(".", TERMINAL_WIDTH - strlen($mes) - strlen($value) - 1);
+            fwrite(STDOUT, "\r{$mes}{$whitespace} {$value}");
+        }
+    }
 }
 
 namespace {
-	use IO\IO;
-	use IO\Filesystem;
 
-	if ($_SERVER['DOCUMENT_ROOT'])
-		die("CLI only");
+    use IO\IO;
+    use IO\Filesystem;
 
-	class Template {
-		private $params = [];
+    if ($_SERVER['DOCUMENT_ROOT'])
+        die("CLI only");
 
-		public function __construct($params = [])
-		{
-			$this->params = $params;
-		}
+    class Template
+    {
+        private $params = [];
 
-		public function render($content)
-		{
-			return preg_replace_callback('/{{[^}]+}}/', [$this, 'interpolate'], $content);
-		}
+        public function __construct($params = [])
+        {
+            $this->params = $params;
+        }
 
-		private function interpolate($template)
-		{
-			if (is_array($template))
-				$template = reset($template);
+        public function render($content)
+        {
+            return preg_replace_callback('/{{[^}]+}}/', [$this, 'interpolate'], $content);
+        }
 
-			$filters = array_map(function ($e) {
-				return trim($e);
-			}, explode('|', trim($template, '{}')));
+        private function interpolate($template)
+        {
+            if (is_array($template))
+                $template = reset($template);
 
-			$var = array_shift($filters);
+            $filters = array_map(function ($e) {
+                return trim($e);
+            }, explode('|', trim($template, '{}')));
 
-			$value = $this->arrayValue($var, $this->params);
+            $var = array_shift($filters);
 
-			if (!empty($filters)) {
-				foreach ($filters as $filter) {
-					if (!method_exists($this, "filter_{$filter}"))
-						throw new \Exception("Filter '{$filter}' not found!");
+            $value = $this->arrayValue($var, $this->params);
 
-					$value = call_user_func([$this, "filter_{$filter}"], $value);
-				}
-			}
+            if (!empty($filters)) {
+                foreach ($filters as $filter) {
+                    if (!method_exists($this, "filter_{$filter}"))
+                        throw new \Exception("Filter '{$filter}' not found!");
 
-			return $value;
-		}
+                    $value = call_user_func([$this, "filter_{$filter}"], $value);
+                }
+            }
 
-		/**
-		 * @param $var
-		 * @param $param
-		 * @return mixed
-		 * @throws Exception
-		 */
-		private function arrayValue($var, $param) {
-			if (is_null($var))
-				return $param;
+            return $value;
+        }
 
-			$shiftedKeys = explode('.', $var, 2);
-			$key = array_key_exists(0, $shiftedKeys) ? $shiftedKeys[0] : null;
-			$more = array_key_exists(1, $shiftedKeys) ? $shiftedKeys[1] : null;
+        /**
+         * @param $var
+         * @param $param
+         * @return mixed
+         * @throws Exception
+         */
+        private function arrayValue($var, $param)
+        {
+            if (is_null($var))
+                return $param;
 
-			if (is_array($param) && array_key_exists($key, $param))
-				return $this->arrayValue($more, $param[$key]);
+            $shiftedKeys = explode('.', $var, 2);
+            $key = array_key_exists(0, $shiftedKeys) ? $shiftedKeys[0] : null;
+            $more = array_key_exists(1, $shiftedKeys) ? $shiftedKeys[1] : null;
 
-			throw new \Exception(sprintf("arrayValue error: Cannot reach '%s' in %s", $var, var_export($param, true)));
-		}
+            if (is_array($param) && array_key_exists($key, $param))
+                return $this->arrayValue($more, $param[$key]);
 
-		public function filter_slashed($value)
-		{
-			return addslashes($value);
-		}
-	}
+            throw new \Exception(sprintf("arrayValue error: Cannot reach '%s' in %s", $var, var_export($param, true)));
+        }
+
+        public function filter_slashed($value)
+        {
+            return addslashes($value);
+        }
+    }
 
 
-	$arTemplate = [];
+    $arTemplate = [];
 
-	$arTemplate['/src/Core/Config/Options.php'] = <<<PHP
+    $arTemplate['/src/Core/Config/Options.php'] = <<<PHP
 <?php
 
 namespace {{ module.namespace }}\Core\Config;
@@ -218,6 +230,557 @@ class Options {
     }
 }
 PHP;
+
+    $arTemplate['/src/Core/Config/Form/FormBuilder.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form;
+
+use {{ module.namespace }}\Core\Config\Form\Components\Component;
+use {{ module.namespace }}\Core\Config\Form\Components\Saveable;
+use {{ module.namespace }}\Core\Config\Form\Components\TabComponent;
+use {{ module.namespace }}\Module;
+use InvalidArgumentException;
+
+class FormBuilder implements Saveable
+{
+    /** @var Component[] */
+    protected \$components = [];
+
+    /** @var TabComponent[] */
+    protected \$tabs = [];
+
+    public function add(Component \$component) {
+        if (\$component instanceof TabComponent)
+            \$this->tabs[] = \$component;
+        else {
+            if (empty(\$this->tabs))
+                throw new InvalidArgumentException("Should be at least 1 tab before adding other components");
+
+            \$component->setTab(end(\$this->tabs));
+            \$this->components[] = \$component;
+        }
+    }
+
+    public function save() {
+        foreach (\$this->tabs as \$tab) {
+            if (\$tab instanceof Saveable) {
+                \$tab->save();
+            }
+        }
+
+        foreach (\$this->components as \$component) {
+            if (\$component instanceof Saveable) {
+                \$component->save();
+            }
+        }
+    }
+
+    /**
+     * @return void
+     */
+    public function render()
+    {
+        global \$APPLICATION;
+
+        \$this->resortComponents(\$this->tabs);
+        \$this->resortComponents(\$this->components);
+
+        \$arTabs = [];
+        foreach (\$this->tabs as \$tab) {
+            \$arTabs[] = \$tab->getArray();
+        }
+
+        \$tabControl = new \CAdminTabControl('tabControl', \$arTabs);
+        \$tabControl->Begin();
+
+        echo '<form name="' . Module::getModuleId() . '" method="POST" action="' . \$APPLICATION->GetCurPage() . '?mid=' . Module::getModuleId() . '&lang=' . LANGUAGE_ID . '" enctype="multipart/form-data">' . bitrix_sessid_post();
+
+        foreach (\$this->tabs as \$tab) {
+            \$tabControl->BeginNextTab();
+            \$tab->render();
+
+            \$tabComponents = \array_filter(\$this->components, function (\$e) use (\$tab) {
+                return \$e->getTab() === \$tab;
+            });
+
+            foreach (\$tabComponents as \$component) {
+                \$component->render();
+            }
+        }
+
+        \$tabControl->Buttons();
+
+        echo     '<input type="submit" name="save" value="Сохранить" />
+					<input type="reset" name="reset" value="Отменить" />
+                    </form>';
+
+        \$tabControl->End();
+    }
+
+    private function resortComponents(&\$components) {
+        usort(\$components, [\$this, 'resortComponentHandler']);
+    }
+
+    private function resortComponentHandler(Component \$a, Component \$b) {
+        if (\$a->getSort() < \$b->getSort())
+            return -1;
+
+        if (\$a->getSort() > \$b->getSort())
+            return 1;
+
+        return 0;
+    }
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/Component.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+use InvalidArgumentException;
+
+abstract class Component {
+
+    protected \$id;
+    protected \$sort;
+    protected \$value;
+    protected \$params = [];
+    protected \$tab;
+
+    public function __construct(string \$id, array \$params, \$value, int \$sort = 0) {
+        \$this->id = \$id;
+        \$this->sort = \$sort;
+        \$this->params = \$params;
+        \$this->value = \$value ?: \$params['default'];
+
+        if (!strlen(trim(\$this->id)))
+            throw new InvalidArgumentException("Empty {id} provided!");
+    }
+
+    public function getId() {
+        return \$this->id;
+    }
+
+    public function getSort() {
+        return \$this->sort;
+    }
+
+    public function getTab() {
+        return \$this->tab;
+    }
+
+    public function setTab(TabComponent \$tab) {
+        \$this->tab = \$tab;
+    }
+
+    /**
+     * Echo HTML
+     *
+     * @return void
+     */
+    abstract public function render();
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/CheckboxComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+use {{ module.namespace }}\Module;
+
+class CheckboxComponent extends LabeledComponent implements Saveable {
+
+    protected function renderInput() {
+        ?>
+        <input  type="checkbox"
+                name="<?= \htmlspecialchars(\$this->id) ?>"
+                value="1"
+                <?= \$this->value ? 'checked' : '' ?>
+                />
+        <?
+    }
+
+    public function save() {
+        \$options = Module::getOptions();
+
+        \$options->set(\$this->getId(), \$_POST[\$this->getId()] ? 1 : 0);
+    }
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/FileComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+use {{ module.namespace }}\Core\Exceptions\NotImplementedException;
+
+class FileComponent extends LabeledComponent implements Saveable {
+
+    protected function renderInput() {
+        \$id = \htmlspecialchars(\$this->getId());
+        CAdminFileDialog::ShowScript(Array(
+            'event' => 'BX_FD_'.\$this->getId(),
+            'arResultDest' => Array('FUNCTION_NAME' => 'BX_FD_ONRESULT_'.\$this->getId()),
+            'arPath' => Array(),
+            'select' => 'F',
+            'operation' => 'O',
+            'showUploadTab' => true,
+            'showAddToMenuTab' => false,
+            'fileFilter' => '',
+            'allowAllFiles' => true,
+            'SaveConfig' => true
+        ));
+        ?>
+        <input  type="text"
+                name="<?= \$id ?>"
+                id="__FD_PARAM_<?= \$id?>"
+                value="<?= \htmlspecialchars(\$this->value) ?>"
+                />
+        <input value="..." type="button" onclick="window.BX_FD_<?= \$id ?>();" />
+        <script>
+            setTimeout(function(){
+                if (BX("bx_fd_input_<?= \strtolower(\$id) ?>"))
+                    BX("bx_fd_input_<?= \strtolower(\$id) ?>").onclick = window.BX_FD_<?= \$id ?>;
+            }, 200);
+            window.BX_FD_ONRESULT_<?= \$id ?> = function(filename, filepath)
+            {
+                var oInput = BX("__FD_PARAM_<?= \$id ?>");
+                if (typeof filename == "object")
+                    oInput.value = filename.src;
+                else
+                    oInput.value = (filepath + "/" + filename).replace(/\/\//ig, '/');
+            }
+        </script>
+        <?
+    }
+
+    public function save() {
+        throw new NotImplementedException;
+        // TODO: implement file save
+    }
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/HeaderComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+class HeaderComponent extends Component {
+    public function __construct(string \$title, int \$sort = 0) {
+        parent::__construct(\uniqid('header_'), [], \$title, \$sort);
+    }
+    public function render() {
+        echo '<tr class="heading"><td colspan="2">', \htmlspecialchars(\$this->value), '</td></tr>';
+    }
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/HiddenComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+use {{ module.namespace }}\Module;
+
+class HiddenComponent extends Component implements Saveable {
+
+    public function render() {
+        ?>
+        <input type="hidden" name="<?= \$this->getId() ?>" value="<?= \htmlspecialchars(\$this->value) ?>" />
+        <?
+    }
+
+    public function save() {
+        \$options = Module::getOptions();
+
+        \$options->set(\$this->getId(), \$_POST[\$this->getId()]);
+    }
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/LabeledComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+abstract class LabeledComponent extends Component {
+
+    public function render() {
+        if (\$this->params['label']) {
+            echo '<tr><td valign="top" width="40%">', \$this->params['required'] ? '<b>' : '', \$this->params['label'], \$this->params['required'] ? '</b>' : '', '</td><td valign="top" nowrap>';
+        } else {
+            echo '<tr><td valign="top" colspan="2" align="center">';
+        }
+
+        \$this->renderInput();
+
+        echo '</td></tr>';
+    }
+
+    abstract protected function renderInput();
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/MultipleSelectComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+use {{ module.namespace }}\Module;
+
+class MultipleSelectComponent extends LabeledComponent implements Saveable
+{
+    protected function renderInput()
+    {
+    ?>
+        <select name="<?= \htmlspecialchars(\$this->getId()) ?>[]"
+                <? foreach (\$this->params['attributes'] as \$key => \$value) {
+                    echo \htmlspecialchars(\$key), '="', \htmlspecialchars(\$value), '" ';
+                } ?>
+                <?= \$this->params['required'] ? 'required' : '' ?>
+                multiple
+            >
+            <? foreach (\$this->params['values'] as \$value => \$name) : ?>
+                <option value="<?= \htmlspecialchars(\$value) ?>" <?= \in_array(\$value, \$this->value) ? 'selected' : '' ?>><?= \htmlspecialchars(\$name) ?></option>
+            <? endforeach ?>
+        </select>
+    <?
+    }
+
+    public function save() {
+        \$options = Module::getOptions();
+
+        \$options->set(\$this->getId(), \$_POST[\$this->getId()]);
+    }
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/MultipleStringComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+use {{ module.namespace }}\Module;
+
+class MultipleStringComponent extends StringComponent implements Saveable {
+
+    public function render() {
+        // TODO: wtf is that?
+        foreach (\$this->value as \$val) {
+            parent::render();
+            \$this->params['label'] = ' ';
+        }
+        parent::render();
+    }
+
+    protected function renderInput() {
+        ?>
+        <input  type="text"
+                name="<?= \htmlspecialchars(\$this->getId()) ?>[]"
+                value="<?= \htmlspecialchars(current(\$this->value)) ?>"
+                <? foreach (\$this->params['attributes'] as \$key => \$value) {
+                    echo \htmlspecialchars(\$key), '="', \htmlspecialchars(\$value), '" ';
+                } ?>
+                />
+        <?
+    }
+
+    public function save() {
+        \$options = Module::getOptions();
+
+        \$options->set(\$this->getId(), \$_POST[\$this->getId()]);
+    }
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/RightsTabComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+use {{ module.namespace }}\Module;
+
+class RightsTabComponent extends TabComponent implements Saveable
+{
+
+    public function __construct()
+    {
+        parent::__construct('edit_access_tab', [
+            'name' => 'Права доступа',
+            'title' => 'Настройка прав доступа',
+        ], 100);
+    }
+
+    public function render()
+    {
+        global \$APPLICATION;
+        \$module_id = Module::getModuleId();
+
+        parent::render();
+        require_once(\$_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/main/admin/group_rights.php");
+    }
+
+    public function save() {
+        if (isset(\$_REQUEST['RIGHTS']) && isset(\$_REQUEST['GROUPS'])) {
+            \$options = Module::getOptions();
+
+            \CMain::DelGroupRight(Module::getModuleId());
+            \$GROUP = \$_REQUEST['GROUPS'];
+            \$RIGHT = \$_REQUEST['RIGHTS'];
+
+            foreach (\$GROUP as \$k => \$v) {
+                if (\$k == 0) {
+                    \$options->set('GROUP_DEFAULT_RIGHT', \$RIGHT[0], 'Right for groups by default');
+                } else {
+                    \CMain::SetGroupRight(Module::getModuleId(), \$GROUP[\$k], \$RIGHT[\$k]);
+                }
+            }
+        }
+    }
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/Saveable.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+interface Saveable {
+    public function save();
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/SelectComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+use {{ module.namespace }}\Module;
+
+class SelectComponent extends LabeledComponent implements Saveable
+{
+    protected function renderInput()
+    {
+    ?>
+        <select name="<?= \htmlspecialchars(\$this->getId()) ?>"
+                <? foreach (\$this->params['attributes'] as \$key => \$value) {
+                    echo \htmlspecialchars(\$key), '="', \htmlspecialchars(\$value), '" ';
+                } ?>
+                <?= \$this->params['required'] ? 'required' : '' ?>
+            >
+            <? if (!\$this->params['required']) : ?>
+                <option value=""><?= \$this->params['no_value_text'] ?></option>
+            <? endif ?>
+            <? foreach (\$this->params['values'] as \$value => \$name) : ?>
+                <option value="<?= \htmlspecialchars(\$value) ?>" <?= \$value == \$this->value ? 'selected' : '' ?>><?= \htmlspecialchars(\$name) ?></option>
+            <? endforeach ?>
+        </select>
+    <?
+    }
+
+    public function save() {
+        \$options = Module::getOptions();
+
+        \$options->set(\$this->getId(), \$_POST[\$this->getId()]);
+    }
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/StringComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+use {{ module.namespace }}\Module;
+
+class StringComponent extends LabeledComponent implements Saveable {
+
+    protected function renderInput() {
+        ?>
+        <input  type="text"
+                name="<?= \htmlspecialchars(\$this->getId()) ?>"
+                value="<?= \htmlspecialchars(\$this->value) ?>"
+                <? foreach (\$this->params['attributes'] as \$key => \$value) {
+                    echo \htmlspecialchars(\$key), '="', \htmlspecialchars(\$value), '" ';
+                } ?>
+                />
+        <?
+    }
+
+    public function save() {
+        \$options = Module::getOptions();
+
+        \$options->set(\$this->getId(), \$_POST[(string) \$this->getId()]);
+    }
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/TabComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+use \CAdminTabControl;
+
+class TabComponent extends Component {
+
+    protected \$control;
+
+    public function __construct(string \$id, array \$params, int \$sort = 0) {
+        parent::__construct(\$id, \$params, null, \$sort);
+    }
+
+    public function setControl(CAdminTabControl \$control) {
+        \$this->control = \$control;
+    }
+
+    public function getArray() : array {
+        return array(
+            'DIV' => \$this->getId(),
+            'TAB' => \$this->params['name'],
+            'ICON' => '',
+            'TITLE' => \$this->params['title'] ?: \$this->params['name']
+        );
+    }
+
+    public function render() {
+        // empty
+    }
+}
+PHP;
+
+    $arTemplate['/src/Core/Config/Form/Components/TextComponent.php'] = <<<PHP
+<?php
+
+namespace {{ module.namespace }}\Core\Config\Form\Components;
+
+use {{ module.namespace }}\Module;
+
+class TextComponent extends LabeledComponent implements Saveable
+{
+    protected function renderInput()
+    {
+        ?>
+            <textarea   name="<?= \$this->getId() ?>"
+                        <? foreach (\$this->params['attributes'] as \$key => \$value) {
+                                echo \htmlspecialchars(\$key), '="', \htmlspecialchars(\$value), '" ';
+                        } ?>><?= \htmlspecialchars(\$value) ?></textarea>
+        <?
+    }
+
+    public function save() {
+        \$options = Module::getOptions();
+
+        \$options->set(\$this->getId(), \$_POST[\$this->getId()]);
+    }
+}
+PHP;
+
     $arTemplate['/src/Core/Config/OptionsFactory.php'] = <<<PHP
 <?php
 
@@ -232,8 +795,14 @@ class OptionsFactory {
     }
 }
 PHP;
+    $arTemplate['/src/Core/Exceptions/NotImplementedException.php'] = <<<PHP
+<?php
 
-	$arTemplate['/src/Core/Exceptions/ServiceNotFoundException.php'] = <<<PHP
+namespace {{ module.namespace }}\Core\Exceptions;
+
+class NotImplementedException extends \Exception {}
+PHP;
+    $arTemplate['/src/Core/Exceptions/ServiceNotFoundException.php'] = <<<PHP
 <?php
 
 namespace {{ module.namespace }}\Core\Exceptions;
@@ -252,7 +821,7 @@ use Psr\Container\NotFoundExceptionInterface;
 class ServiceFactoryNotCallableException extends \Exception implements NotFoundExceptionInterface {}
 PHP;
 
-	$arTemplate['/src/Core/Log/FileLogHandler.php'] = <<<PHP
+    $arTemplate['/src/Core/Log/FileLogHandler.php'] = <<<PHP
 <?php
 
 namespace {{ module.namespace }}\Core\Log;
@@ -325,27 +894,16 @@ class FileLogHandler implements LogHandlerInterface {
     }
 }
 PHP;
-	$arTemplate['/src/Core/Log/Logger.php'] = <<<PHP
+    $arTemplate['/src/Core/Log/Logger.php'] = <<<PHP
 <?php
-
 namespace {{ module.namespace }}\Core\Log;
 
-use Psr\Log\LoggerInterface;
-use Psr\Log\LogLevel;
+use Psr\Log\AbstractLogger;
 
-class Logger implements LoggerInterface {
-    protected \$levelMap = array(
-        LogLevel::NOTICE => 1,
-        LogLevel::INFO => 2,
-        LogLevel::WARNING => 3,
-        LogLevel::ALERT => 4,
-        LogLevel::ERROR => 5,
-        LogLevel::CRITICAL => 6,
-        LogLevel::EMERGENCY => 7,
-        LogLevel::DEBUG => 8,
-    );
+class Logger extends AbstractLogger {
 
-    protected \$level;
+    protected \$levels_enabled = [];
+
     /** @var LogHandlerInterface */
     protected \$handler;
 
@@ -353,56 +911,14 @@ class Logger implements LoggerInterface {
     {
         \$this->handler = \$handler;
     }
-
-    public function setLevel(\$level)
+    public function setLevelsEnabled(array \$levels)
     {
-        \$this->level = \$level;
-    }
-
-    public function emergency(\$message, array \$context = array())
-    {
-        if (\$this->level && \$this->levelMap[\$this->level] >= \$this->levelMap[LogLevel::EMERGENCY])
-            \$this->log(LogLevel::EMERGENCY, \$message, \$context);
-    }
-    public function alert(\$message, array \$context = array())
-    {
-        if (\$this->level && \$this->levelMap[\$this->level] >= \$this->levelMap[LogLevel::ALERT])
-            \$this->log(LogLevel::ALERT, \$message, \$context);
-    }
-    public function critical(\$message, array \$context = array())
-    {
-        if (\$this->level && \$this->levelMap[\$this->level] >= \$this->levelMap[LogLevel::CRITICAL])
-            \$this->log(LogLevel::CRITICAL, \$message, \$context);
-    }
-    public function error(\$message, array \$context = array())
-    {
-        if (\$this->level && \$this->levelMap[\$this->level] >= \$this->levelMap[LogLevel::ERROR])
-            \$this->log(LogLevel::ERROR, \$message, \$context);
-    }
-    public function warning(\$message, array \$context = array())
-    {
-        if (\$this->level && \$this->levelMap[\$this->level] >= \$this->levelMap[LogLevel::WARNING])
-            \$this->log(LogLevel::WARNING, \$message, \$context);
-    }
-    public function notice(\$message, array \$context = array())
-    {
-        if (\$this->level && \$this->levelMap[\$this->level] >= \$this->levelMap[LogLevel::NOTICE])
-            \$this->log(LogLevel::NOTICE, \$message, \$context);
-    }
-    public function info(\$message, array \$context = array())
-    {
-        if (\$this->level && \$this->levelMap[\$this->level] >= \$this->levelMap[LogLevel::INFO])
-            \$this->log(LogLevel::INFO, \$message, \$context);
-    }
-    public function debug(\$message, array \$context = array())
-    {
-        if (\$this->level && \$this->levelMap[\$this->level] >= \$this->levelMap[LogLevel::DEBUG])
-            \$this->log(LogLevel::DEBUG, \$message, \$context);
+        \$this->levels_enabled = \$levels;
     }
 
     public function log(\$level, \$message, array \$context = array())
     {
-        if (\$this->handler)
+        if (\in_array(\$level, \$this->levels_enabled) && \$this->handler)
             \$this->handler->log(\$level, \$message, \$context);
     }
 }
@@ -432,7 +948,7 @@ class LoggerFactory {
     }
 }
 PHP;
-	$arTemplate['/src/Core/Log/LogHandlerInterface.php'] = <<<PHP
+    $arTemplate['/src/Core/Log/LogHandlerInterface.php'] = <<<PHP
 <?php
 
 namespace {{ module.namespace }}\Core\Log;
@@ -491,7 +1007,7 @@ class Container implements ContainerInterface {
     {
         return array_key_exists(\$id, \$this->services) || class_exists(\$id);
     }
-    
+
     public function setDependencies(array \$dependencies)
     {
         if (is_array(\$dependencies['factories']))
@@ -559,8 +1075,7 @@ class Container implements ContainerInterface {
 }
 PHP;
 
-
-	$arTemplate['/src/Core/BaseModule.php'] = <<<PHP
+    $arTemplate['/src/Core/BaseModule.php'] = <<<PHP
 <?php
 
 namespace {{ module.namespace }}\Core;
@@ -653,6 +1168,7 @@ abstract class BaseModule
 	}
 }
 PHP;
+
     $arTemplate['/src/Core/ConfigAggregator.php'] = <<<PHP
 <?php
 
@@ -830,7 +1346,7 @@ abstract class Installer extends \CModule
         \$files = glob(\$this->GetModuleDir()."/install/admin/*.php");
         foreach (\$files as \$file) {
             \$basename = \$this->MODULE_ID . '_' . basename(\$file);
-            unlink(Application::getDocumentRoot()."/bitrix/admin/{$basename}");
+            unlink(Application::getDocumentRoot()."/bitrix/admin/{\$basename}");
         }
     }
 
@@ -860,7 +1376,7 @@ abstract class Installer extends \CModule
 }
 PHP;
 
-	$arTemplate['/install/index.php'] = <<<PHP
+    $arTemplate['/install/index.php'] = <<<PHP
 <?php defined('B_PROLOG_INCLUDED') and (B_PROLOG_INCLUDED === true) or die();
 
 use {{ module.namespace }}\Core\Installer;
@@ -925,7 +1441,7 @@ class {{ module.class }} extends Installer {
 		if (!Option::get(\$this->MODULE_ID, 'UNINSTALL_SAVE_SETTINGS', 1)) {
 			// \$this->errors = \$DB->RunSQLBatch(__DIR__.'/batch/db/'.strtolower(\$DB->type).'/uninstall.sql');
 		}
-		
+
 		if (is_array(\$this->errors))
 		{
 			\$APPLICATION->ThrowException(implode(' ', \$this->errors));
@@ -940,7 +1456,7 @@ class {{ module.class }} extends Installer {
 // Need to be closed because of Bitrix obfuscation
 ?>
 PHP;
-	$arTemplate['/install/version.php'] = <<<PHP
+    $arTemplate['/install/version.php'] = <<<PHP
 <?php
 \$arModuleVersion = array(
 	"VERSION" => "{{ module.version }}",
@@ -948,7 +1464,7 @@ PHP;
 );
 PHP;
 
-	$arTemplate['/lang/ru/options.php'] = <<<PHP
+    $arTemplate['/lang/ru/options.php'] = <<<PHP
 <?php
 defined('B_PROLOG_INCLUDED') and (B_PROLOG_INCLUDED === true) or die();
 
@@ -958,12 +1474,17 @@ defined('B_PROLOG_INCLUDED') and (B_PROLOG_INCLUDED === true) or die();
 \$MESS['{{ lang.prefix }}_SETTINGS_MODULE'] = "Основные настройки";
 
 \$MESS['{{ lang.prefix }}_LOG_LEVEL'] = "Логировать";
-\$MESS['{{ lang.prefix }}_LOG_LEVEL_NONE'] = "Нет";
+\$MESS['{{ lang.prefix }}_LOG_LEVEL_NOTICE'] = "Сообщения";
+\$MESS['{{ lang.prefix }}_LOG_LEVEL_INFO'] = "Информация";
+\$MESS['{{ lang.prefix }}_LOG_LEVEL_WARNING'] = "Предупреждения";
+\$MESS['{{ lang.prefix }}_LOG_LEVEL_ALERT'] = "Тревоги";
 \$MESS['{{ lang.prefix }}_LOG_LEVEL_ERROR'] = "Ошибки";
-\$MESS['{{ lang.prefix }}_LOG_LEVEL_DEBUG'] = "Режим отладки";
+\$MESS['{{ lang.prefix }}_LOG_LEVEL_CRITICAL'] = "Критичные";
+\$MESS['{{ lang.prefix }}_LOG_LEVEL_EMERGENCY'] = "Служебные";
+\$MESS['{{ lang.prefix }}_LOG_LEVEL_DEBUG'] = "Отладочные";
 
 PHP;
-	$arTemplate['/lang/ru/install/index.php'] = <<<PHP
+    $arTemplate['/lang/ru/install/index.php'] = <<<PHP
 <?php
 \$MESS["{{ lang.prefix }}_MODULE_NAME"] = "{{ module.name }}";
 \$MESS["{{ lang.prefix }}_MODULE_DESCRIPTION"] = "{{ module.description}}";
@@ -971,7 +1492,7 @@ PHP;
 \$MESS["{{ lang.prefix }}_PARTNER_URI"] = "{{ vendor.site }}";
 PHP;
 
-	$arTemplate['/lib/controller/data.php'] = <<<PHP
+    $arTemplate['/lib/controller/data.php'] = <<<PHP
 <?php
 
 namespace {{ module.namespace }}\Controller;
@@ -1000,7 +1521,7 @@ class Connection extends Controller
 }
 PHP;
 
-	$arTemplate['/vendor/Psr/Container/src/ContainerInterface.php'] = <<<PHP
+    $arTemplate['/vendor/Psr/Container/src/ContainerInterface.php'] = <<<PHP
 <?php
 
 namespace Psr\Container;
@@ -1010,14 +1531,14 @@ interface ContainerInterface {
 	public function has(\$id);
 }
 PHP;
-	$arTemplate['/vendor/Psr/Container/src/NotFoundExceptionInterface.php'] = <<<PHP
+    $arTemplate['/vendor/Psr/Container/src/NotFoundExceptionInterface.php'] = <<<PHP
 <?php
 
 namespace Psr\Container;
 
 interface NotFoundExceptionInterface {}
 PHP;
-	$arTemplate['/vendor/Psr/Log/src/LoggerInterface.php'] = <<<PHP
+    $arTemplate['/vendor/Psr/Log/src/LoggerInterface.php'] = <<<PHP
 <?php
 
 namespace Psr\Log;
@@ -1133,7 +1654,170 @@ interface LoggerInterface
     public function log(\$level, \$message, array \$context = array());
 }
 PHP;
-	$arTemplate['/vendor/Psr/Log/src/LogLevel.php'] = <<<PHP
+    $arTemplate['/vendor/Psr/Log/src/AbstractLogger.php'] = <<<PHP
+<?php
+
+namespace Psr\Log;
+
+/**
+ * This is a simple Logger implementation that other Loggers can inherit from.
+ *
+ * It simply delegates all log-level-specific methods to the `log` method to
+ * reduce boilerplate code that a simple Logger that does the same thing with
+ * messages regardless of the error level has to implement.
+ */
+abstract class AbstractLogger implements LoggerInterface
+{
+    /**
+     * System is unusable.
+     *
+     * @param string \$message
+     * @param array  \$context
+     *
+     * @return void
+     */
+    public function emergency(\$message, array \$context = array())
+    {
+        \$this->log(LogLevel::EMERGENCY, \$message, \$context);
+    }
+
+    /**
+     * Action must be taken immediately.
+     *
+     * Example: Entire website down, database unavailable, etc. This should
+     * trigger the SMS alerts and wake you up.
+     *
+     * @param string \$message
+     * @param array  \$context
+     *
+     * @return void
+     */
+    public function alert(\$message, array \$context = array())
+    {
+        \$this->log(LogLevel::ALERT, \$message, \$context);
+    }
+
+    /**
+     * Critical conditions.
+     *
+     * Example: Application component unavailable, unexpected exception.
+     *
+     * @param string \$message
+     * @param array  \$context
+     *
+     * @return void
+     */
+    public function critical(\$message, array \$context = array())
+    {
+        \$this->log(LogLevel::CRITICAL, \$message, \$context);
+    }
+
+    /**
+     * Runtime errors that do not require immediate action but should typically
+     * be logged and monitored.
+     *
+     * @param string \$message
+     * @param array  \$context
+     *
+     * @return void
+     */
+    public function error(\$message, array \$context = array())
+    {
+        \$this->log(LogLevel::ERROR, \$message, \$context);
+    }
+
+    /**
+     * Exceptional occurrences that are not errors.
+     *
+     * Example: Use of deprecated APIs, poor use of an API, undesirable things
+     * that are not necessarily wrong.
+     *
+     * @param string \$message
+     * @param array  \$context
+     *
+     * @return void
+     */
+    public function warning(\$message, array \$context = array())
+    {
+        \$this->log(LogLevel::WARNING, \$message, \$context);
+    }
+
+    /**
+     * Normal but significant events.
+     *
+     * @param string \$message
+     * @param array  \$context
+     *
+     * @return void
+     */
+    public function notice(\$message, array \$context = array())
+    {
+        \$this->log(LogLevel::NOTICE, \$message, \$context);
+    }
+
+    /**
+     * Interesting events.
+     *
+     * Example: User logs in, SQL logs.
+     *
+     * @param string \$message
+     * @param array  \$context
+     *
+     * @return void
+     */
+    public function info(\$message, array \$context = array())
+    {
+        \$this->log(LogLevel::INFO, \$message, \$context);
+    }
+
+    /**
+     * Detailed debug information.
+     *
+     * @param string \$message
+     * @param array  \$context
+     *
+     * @return void
+     */
+    public function debug(\$message, array \$context = array())
+    {
+        \$this->log(LogLevel::DEBUG, \$message, \$context);
+    }
+}
+    
+PHP;
+    $arTemplate['/vendor/Psr/Log/src/NullLogger.php'] = <<<PHP
+<?php
+
+namespace Psr\Log;
+
+/**
+ * This Logger can be used to avoid conditional log calls.
+ *
+ * Logging should always be optional, and if no logger is provided to your
+ * library creating a NullLogger instance to have something to throw logs at
+ * is a good way to avoid littering your code with `if ($this->logger) { }`
+ * blocks.
+ */
+class NullLogger extends AbstractLogger
+{
+    /**
+     * Logs with an arbitrary level.
+     *
+     * @param mixed  \$level
+     * @param string \$message
+     * @param array  \$context
+     *
+     * @return void
+     *
+     * @throws \Psr\Log\InvalidArgumentException
+     */
+    public function log(\$level, \$message, array \$context = array())
+    {
+        // noop
+    }
+}  
+PHP;
+    $arTemplate['/vendor/Psr/Log/src/LogLevel.php'] = <<<PHP
 <?php
 
 namespace Psr\Log;
@@ -1153,8 +1837,24 @@ class LogLevel
     const DEBUG     = 'debug';
 }
 PHP;
+    $arTemplate['/vendor/autoload.php'] = <<<PHP
+<?php
+spl_autoload_register(function (\$class) {
+	\$moduleNamespace = '{{ module.namespace | slashed }}\\\\';
+	if (strpos(\$class, \$moduleNamespace) === 0) {
+		\$path = __DIR__ . '/src/' . strtr(substr(\$class, strlen(\$moduleNamespace)), '\\\\', '/') . '.php';
+		if (is_file(\$path))
+			require_once \$path;
+	} else {
+	    list(\$vendor, \$library, \$file) = explode('\\\\', \$class, 3);
+		\$path = __DIR__ . "/vendor/{\$vendor}/{\$library}/src/" . strtr(\$file, '\\\\', '/') . '.php';
+		if (is_file(\$path))
+			require_once \$path;
+	}
+});
+PHP;
 
-	$arTemplate['/.settings.php'] = <<<PHP
+    $arTemplate['/.settings.php'] = <<<PHP
 <?php
 return [
     'controllers' => [
@@ -1167,7 +1867,7 @@ return [
     ],
 ];
 PHP;
-	$arTemplate['/config.php'] = <<<PHP
+    $arTemplate['/config.php'] = <<<PHP
 <?php
 
 use {{ module.namespace }}\Core\Config\Options;
@@ -1182,39 +1882,29 @@ return [
             LoggerInterface::class => LoggerFactory::class,
         ]
     ],
-    'log_file' => __DIR__ . '/logs/module.log',
+    'log_file' => __DIR__ . '/logs/module-log.txt',
     'cache_config' => false,
 ];
 PHP;
-	$arTemplate['/default_option.php'] = <<<PHP
+
+    $arTemplate['/default_option.php'] = <<<PHP
 <?php
 
 \${{ module.class }}_default_option = array(
 	'ACTIVE' => 0,
 	'UNINSTALL_SAVE_SETTINGS' => 0,
-	'LOG_LEVEL' => 0,
+	'LOG_LEVEL' => [],
 );
 PHP;
-	$arTemplate['/include.php'] = <<<PHP
+
+    $arTemplate['/include.php'] = <<<PHP
 <?php
 
 namespace {{ module.namespace }};
 
 use {{ module.namespace }}\Core\BaseModule;
 
-spl_autoload_register(function (\$class) {
-	\$moduleNamespace = '{{ module.namespace | slashed }}\\\\';
-	if (strpos(\$class, \$moduleNamespace) === 0) {
-		\$path = __DIR__ . '/src/' . strtr(substr(\$class, strlen(\$moduleNamespace)), '\\\\', '/') . '.php';
-		if (is_file(\$path))
-			require_once \$path;
-	} else {
-	    list(\$vendor, \$library, \$file) = explode('\\\\', \$class, 3);
-		\$path = __DIR__ . "/vendor/{\$vendor}/{\$library}/src/" . strtr(\$file, '\\\\', '/') . '.php';
-		if (is_file(\$path))
-			require_once \$path;
-	}
-});
+require_once(__DIR__ . '/vendor/autoload.php');
 
 final class Module extends BaseModule {
 
@@ -1223,106 +1913,96 @@ final class Module extends BaseModule {
 // Need to be closed because of Bitrix obfuscation
 ?>
 PHP;
-	$arTemplate['/options.php'] = <<<PHP
+
+    $arTemplate['/options.php'] = <<<PHP
 <?php
+
 use Bitrix\Main\Localization\Loc;
 use Bitrix\Main\Loader;
+use {{ module.namespace }}\Core\Config\Form\Components;
+use {{ module.namespace }}\Core\Config\Form\FormBuilder;
 use {{ module.namespace }}\Module;
+use Psr\Log\LogLevel;
 
-Loc::loadMessages(\$_SERVER["DOCUMENT_ROOT"].BX_ROOT."/modules/main/options.php");
+Loc::loadMessages(\$_SERVER["DOCUMENT_ROOT"] . BX_ROOT . "/modules/main/options.php");
 Loc::loadMessages(__FILE__);
-
-\$MODULE_ID = basename(__DIR__);
-\$module_state = Loader::includeSharewareModule(\$MODULE_ID);
+\$module_id = basename(__DIR__);
+\$module_state = Loader::includeSharewareModule(\$module_id);
 if (\$module_state === Loader::MODULE_DEMO_EXPIRED) {
-	echo Loc::getMessage("MODULE_EXPIRED_DESCRIPTION_LINK");
-	return;
+    echo Loc::getMessage("MODULE_EXPIRED_DESCRIPTION_LINK");
+    return;
 }
-
 ClearVars();
 
 \$container = Module::getContainer();
 \$options = Module::getOptions();
 \$arOptions = \$options->all();
 
+\$form = new FormBuilder();
 
-#
-# Save
-#
-if ( \$_SERVER["REQUEST_METHOD"]=="POST" && (\$_REQUEST["save"] <> '' || \$_REQUEST["apply"] <> '') && check_bitrix_sessid()){
-	\$options->save(\$_POST);
-	LocalRedirect(\$APPLICATION->GetCurPageParam());
-	exit;
+\$form->add(new Components\TabComponent('main_tab', [
+    'name' => Loc::getMessage("{{ lang.prefix }}_SETTINGS_MODULE")
+]));
+
+\$form->add(new Components\HeaderComponent(Loc::getMessage("{{ lang.prefix }}_MAIN")));
+
+\$form->add(new Components\CheckboxComponent('ACTIVE', [
+    'label' => Loc::getMessage("{{ lang.prefix }}_ACTIVE"),
+], \$arOptions['ACTIVE']));
+
+\$form->add(new Components\CheckboxComponent('UNINSTALL_SAVE_SETTINGS', [
+    'label' => Loc::getMessage("{{ lang.prefix }}_UNINSTALL_SAVE_SETTINGS"),
+], \$arOptions['UNINSTALL_SAVE_SETTINGS']));
+
+\$form->add(new Components\MultipleSelectComponent('LOG_LEVELS', [
+    'label' => Loc::getMessage("{{ lang.prefix }}_LOG_LEVELS"),
+    'values' => [
+        LogLevel::NOTICE => Loc::getMessage("{{ lang.prefix }}_LOG_LEVEL_NOTICE"),
+        LogLevel::INFO => Loc::getMessage("{{ lang.prefix }}_LOG_LEVEL_INFO"),
+        LogLevel::WARNING => Loc::getMessage("{{ lang.prefix }}_LOG_LEVEL_WARNING"),
+        LogLevel::ALERT => Loc::getMessage("{{ lang.prefix }}_LOG_LEVEL_ALERT"),
+        LogLevel::ERROR => Loc::getMessage("{{ lang.prefix }}_LOG_LEVEL_ERROR"),
+        LogLevel::CRITICAL => Loc::getMessage("{{ lang.prefix }}_LOG_LEVEL_CRITICAL"),
+        LogLevel::EMERGENCY => Loc::getMessage("{{ lang.prefix }}_LOG_LEVEL_EMERGENCY"),
+        LogLevel::DEBUG => Loc::getMessage("{{ lang.prefix }}_LOG_LEVEL_DEBUG"),
+    ]
+], \$arOptions['LOG_LEVELS']));
+
+
+\$form->add(new Components\RightsTabComponent);
+
+// Save form
+if (\$_SERVER["REQUEST_METHOD"] == "POST" && (\$_REQUEST["save"] <> '') && check_bitrix_sessid()) {
+    \$form->save();
+
+    LocalRedirect(\$APPLICATION->GetCurPageParam());
+    exit;
 }
 
-#
-# Tabs
-#
-\$aTabs = array();
-\$aTabs[] = array("DIV" => "{{ lang.prefix }}_MAIN", "TAB" => GetMessage("{{ lang.prefix }}_MAIN"), "TITLE"=>GetMessage("{{ lang.prefix }}_MAIN"));
-\$tabControl = new CAdminForm("user_edit", \$aTabs);
-
-\$tabControl->Begin(array(
-	"FORM_ACTION" => \$APPLICATION->GetCurPage()."?lang=".LANG."&mid=".Module::getModuleId()."&mid_menu=1",
-	"FORM_ATTRIBUTES" => "",
-));
-
-\$tabControl->BeginEpilogContent();
-echo bitrix_sessid_post();
-\$tabControl->EndEpilogContent();
-
-#
-# Tab 1
-#
-\$tabControl->BeginNextFormTab();
-
-\$tabControl->AddSection("{{ lang.prefix }}_SETTINGS_MODULE", GetMessage("{{ lang.prefix }}_SETTINGS_MODULE"));
-
-\$tabControl->addCheckboxField('ACTIVE', GetMessage("{{ lang.prefix }}_ACTIVE"), false, 1, \$arOptions['ACTIVE']);
-\$tabControl->addCheckboxField('UNINSTALL_SAVE_SETTINGS', GetMessage("{{ lang.prefix }}_UNINSTALL_SAVE_SETTINGS"), false, 1, \$arOptions['UNINSTALL_SAVE_SETTINGS']);
-\$logLevels = [
-	0 => GetMessage("{{ lang.prefix }}_LOG_LEVEL_NONE"),
-	'error' => GetMessage("{{ lang.prefix }}_LOG_LEVEL_ERROR"),
-	'debug' => GetMessage("{{ lang.prefix }}_LOG_LEVEL_DEBUG"),
-];
-\$tabControl->addDropdownField('LOG_LEVEL', GetMessage("{{ lang.prefix }}_LOG_LEVEL"), false, \$logLevels, \$arOptions['LOG_LEVEL']);
-
-
-#
-# Buttons
-#
-\$tabControl->Buttons(array(
-	"disabled" => false,
-	"btnSave" => true,
-	"btnApply" => false,
-	"btnCancel" => true,
-	"btnSaveAndAdd" => false,
-));
-
-
-\$tabControl->Show();
+// Render form
+\$form->render();
 PHP;
 
-	#Asking user
-	IO::Say("Module maker CLI v%s", '0.6');
-	$inputs = [
-		'module' => [
-			'id' => 'local.lib',
-			'version' => '1.0.0',
-			'name' => 'Module example',
-			'description' => 'Boilerplate for module',
-		],
-		'lang' => [
-			'prefix' => 'CW_LL',
-		],
-		'vendor' => [
-			'name' => 'Ctweb',
-			'site' => 'https://ctweb.ru',
-		]
-	];
+    #Asking user
+    IO::Say("Module maker CLI v%s", '0.6');
+    $inputs = [
+        'module' => [
+            'id' => 'local.lib',
+            'version' => '1.0.0',
+            'name' => 'Module example',
+            'description' => 'Boilerplate for module',
+        ],
+        'lang' => [
+            'prefix' => 'CW_LL',
+        ],
+        'vendor' => [
+            'name' => 'Ctweb',
+            'site' => 'https://ctweb.ru',
+        ]
+    ];
 
-	$confirm = 'y';
-	do {
+    $confirm = 'y';
+    do {
         do {
             IO::Ask('Module namespace (ex.: Vendor\\ModuleName)', $inputs['module']['namespace']);
         } while (!preg_match("/^[A-Z][\w\d]+\\\\[A-Z][\w\d]+$/", $inputs['module']['namespace']) !== false);
@@ -1335,54 +2015,54 @@ PHP;
         }, explode('\\', $inputs['module']['namespace'])));
 
         IO::Ask("Lang prefix", $inputs['lang']['prefix']);
-		IO::Ask("Version", $inputs['module']['version']);
+        IO::Ask("Version", $inputs['module']['version']);
 
-		IO::Ask("Name", $inputs['module']['name']);
-		IO::Ask("Description", $inputs['module']['description']);
+        IO::Ask("Name", $inputs['module']['name']);
+        IO::Ask("Description", $inputs['module']['description']);
 
         $inputs['vendor']['name'] = explode('\\', $inputs['module']['namespace'])[0];
         $inputs['vendor']['site'] = 'https://' . strtolower($inputs['vendor']['name']) . '.ru';
 
         IO::Ask("Vendor", $inputs['vendor']['name']);
-		IO::Ask("Vendor site", $inputs['vendor']['site']);
+        IO::Ask("Vendor site", $inputs['vendor']['site']);
 
         $inputs['module']['id'] = strtolower(str_replace('\\', '.', $inputs['module']['namespace']));
-		$inputs['module']['class'] = strtr($inputs['module']['id'], '.', '_');
+        $inputs['module']['class'] = strtr($inputs['module']['id'], '.', '_');
 
-		$inputs['module']['versionDate'] = date_format(date_create(), 'Y-m-d H:i:s');
+        $inputs['module']['versionDate'] = date_format(date_create(), 'Y-m-d H:i:s');
 
-		#
-		#   Confirm info
-		#
-		IO::Say("Installing module:");
-		IO::Say("Module id: %s", $inputs['module']['id']);
-		IO::Say("Module name: %s", $inputs['module']['name']);
-		IO::Say("Module description: %s\n", $inputs['module']['description']);
+        #
+        #   Confirm info
+        #
+        IO::Say("Installing module:");
+        IO::Say("Module id: %s", $inputs['module']['id']);
+        IO::Say("Module name: %s", $inputs['module']['name']);
+        IO::Say("Module description: %s\n", $inputs['module']['description']);
 
-		IO::Say("Module class: %s", $inputs['module']['class']);
-		IO::Say("Module namespace: %s\n", $inputs['module']['namespace']);
+        IO::Say("Module class: %s", $inputs['module']['class']);
+        IO::Say("Module namespace: %s\n", $inputs['module']['namespace']);
 
-		IO::Say("Version: %s", $inputs['module']['version']);
-		IO::Say("Version date: %s\n", $inputs['module']['versionDate']);
+        IO::Say("Version: %s", $inputs['module']['version']);
+        IO::Say("Version date: %s\n", $inputs['module']['versionDate']);
 
-		IO::Say("Vendor: %s", $inputs['vendor']['name']);
-		IO::Say("Vendor site: %s\n", $inputs['vendor']['site']);
+        IO::Say("Vendor: %s", $inputs['vendor']['name']);
+        IO::Say("Vendor site: %s\n", $inputs['vendor']['site']);
 
-		IO::Say("Lang prefix: %s\n", $inputs['lang']['prefix']);
+        IO::Say("Lang prefix: %s\n", $inputs['lang']['prefix']);
 
-		IO::Ask("Is information correct? (Y|n)", $confirm);
-	} while (trim(strtolower($confirm)) !== 'y');
+        IO::Ask("Is information correct? (Y|n)", $confirm);
+    } while (trim(strtolower($confirm)) !== 'y');
 
-	#Generate files
-	$module_dir = __DIR__ . "/{$inputs['module']['id']}";
+    #Generate files
+    $module_dir = __DIR__ . "/{$inputs['module']['id']}";
 
-	$renderer = new Template($inputs);
+    $renderer = new Template($inputs);
 
-	foreach ($arTemplate as $path => $template) {
+    foreach ($arTemplate as $path => $template) {
 
-		$compiledTemplate = $renderer->render($template);
+        $compiledTemplate = $renderer->render($template);
 
-		$path = (strpos($path, '/') === 0) ? $path : "/{$path}";
-		Filesystem::CreateFile($module_dir . $path, $compiledTemplate);
-	}
+        $path = (strpos($path, '/') === 0) ? $path : "/{$path}";
+        Filesystem::CreateFile($module_dir . $path, $compiledTemplate);
+    }
 }

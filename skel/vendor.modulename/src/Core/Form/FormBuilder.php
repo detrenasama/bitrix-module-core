@@ -2,7 +2,7 @@
 
 namespace Vendor\ModuleName\Core\Form;
 
-use Vendor\ModuleName\Core\Config\Form\Components;
+use Vendor\ModuleName\Core\Form\Components;
 use Vendor\ModuleName\Module;
 use InvalidArgumentException;
 
@@ -10,7 +10,7 @@ class FormBuilder implements Saveable
 {
     /** @var Component[] */
     protected $components = [];
-    /** @var TabComponent[] */
+    /** @var Components\TabComponent[] */
     protected $tabs = [];
 
     public function add(Component $component)

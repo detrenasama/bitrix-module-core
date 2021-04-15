@@ -139,20 +139,20 @@ namespace {
     $arTemplate = {{templates}};
 
     #Asking user
-    IO::Say("Module maker CLI v%s", '0.6');
+    IO::Say("Module maker CLI v%s", '0.7');
     $inputs = [
         'module' => [
-            'id' => 'local.lib',
+            'id' => 'my.module',
             'version' => '1.0.0',
             'name' => 'Module example',
             'description' => 'Boilerplate for module',
         ],
         'lang' => [
-            'prefix' => 'CW_LL',
+            'prefix' => 'MY_MD',
         ],
         'vendor' => [
-            'name' => 'Ctweb',
-            'site' => 'https://ctweb.ru',
+            'name' => 'Me',
+            'site' => 'https://localhost.ru',
         ]
     ];
 

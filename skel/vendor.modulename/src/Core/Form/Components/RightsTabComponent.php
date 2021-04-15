@@ -12,7 +12,7 @@ class RightsTabComponent extends TabComponent implements Saveable
         parent::__construct('edit_access_tab', [
             'name' => 'Права доступа',
             'title' => 'Настройка прав доступа',
-        ], 1000);
+        ]);
     }
     public function render()
     {
